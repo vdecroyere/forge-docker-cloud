@@ -1,0 +1,62 @@
+version: '3.8'
+
+# Setup the network for the reverse proxy.
+# All containers will be connected to this network.
+networks:
+  default:
+    internal: false
+    name: reverse-proxy
+
+services:
+  traefik:
+    container_name: traefik
+    image: traefik:latest
+    restart: always
+    command:
+      # We are going to use the docker provider
+      - "--providers.docker"
+      # Only enabled containers should be exposed
+      - "--providers.docker.exposedByDefault=false"
+      - "--providers.file.watch=true"
+      - "--providers.file.directory=/providers/"
+      # We want to use the dashbaord
+      - "--api.dashboard=true"
+      # The entrypoints we ant to expose
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.websecure.address=:443"
+      # Enable ACME (Let's Encrypt): automatic SSL.
+      - "--certificatesresolvers.letsencrypt.acme.email=vincent.decroyere@gmail.com"
+      - "--certificatesresolvers.letsencrypt.acme.storage=/etc/traefik/acme/acme.json"
+      - "--certificatesresolvers.letsencrypt.acme.tlschallenge=true"
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      # The acme.json file is required by Let's Encrypt
+      - ./letsencrypt/acme.json:/etc/traefik/acme/acme.json
+      - ./providers:/providers
+    labels:
+      # Since we don't expose containers per default we also need to enable traefik to expose the dashboard.
+      - "traefik.enable=true"
+      # Enable the https entrypoint
+      - "traefik.http.routers.dashboard.entrypoints=websecure"
+      # The domain we want to listen to
+      - "traefik.http.routers.dashboard.rule=Host(`cloud.decroyere.net`)"
+      # We want to obtain a certificate through Let's Encrypt
+      - "traefik.http.routers.dashboard.tls=true"
+      - "traefik.http.routers.dashboard.tls.certresolver=letsencrypt"
+      # We need to attach the api@internal service to the dashboard router
+      #  in order for the dashboard to be able to access the api (I think 🙈)
+      - "traefik.http.routers.dashboard.service=api@internal"
+
+      - "traefik.http.routers.dashboard.middlewares=authtraefik"
+      - "traefik.http.middlewares.authtraefik.basicauth.users=user:$$apr1$$q8eZFHjF$$Fvmkk//V6Btlaf2i/ju5n/" # user/password
+
+      # global redirect to https
+      - "traefik.http.routers.http-catchall.rule=hostregexp(`{host:.+}`)"
+      - "traefik.http.routers.http-catchall.entrypoints=web"
+      - "traefik.http.routers.http-catchall.middlewares=redirect-to-https"
+
+      # middleware redirect
+      - "traefik.http.middlewares.redirect-to-https.redirectscheme.scheme=https"
