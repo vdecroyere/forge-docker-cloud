@@ -1,0 +1,19 @@
+version: '3.3'
+
+networks:
+  reverse-proxy:
+    external: true
+    
+services:
+  gitlab_runner:
+    container_name: gitlab_runner
+    image: 'gitlab/gitlab-runner:latest'
+    restart: always
+    networks:
+      - reverse-proxy
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - gitlab_runner_config:/etc/gitlab-runner
+      
+volumes:
+  gitlab_runner_config:
