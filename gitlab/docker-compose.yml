@@ -1,0 +1,105 @@
+version: '3.8'
+
+networks:
+  reverse-proxy:
+    external: true
+    
+services:
+  gitlab:
+    container_name: gitlab
+    image: gitlab/gitlab-ce:latest
+    restart: always
+    networks:
+      - reverse-proxy
+    volumes:
+      - gitlab_config:/etc/gitlab
+      - gitlab_logs:/var/log/gitlab
+      - gitlab_data:/var/opt/gitlab
+    depends_on:
+      - gitlab-postgres
+    environment:
+      GITLAB_OMNIBUS_CONFIG: |
+        # Server Configuration
+        external_url 'https://gitlab.decroyere.net'
+        nginx['listen_https'] = false
+        nginx['listen_port'] = 80
+        nginx['proxy_set_headers'] = {
+          "X-Forwarded-Proto" => "https",
+          "X-Forwarded-SSL" => "on"
+        }
+        # Database Configuration
+        gitlab_rails['db_adapter'] = "postgresql"
+        gitlab_rails['db_database'] = "gitlab"
+        gitlab_rails['db_username'] = "postgres"
+        gitlab_rails['db_password'] = "gitlabpassword"
+        gitlab_rails['db_host'] = "gitlab-postgres"
+        
+        # Gitlab Registry
+        registry['enable'] = false
+        gitlab_rails['registry_enabled'] = true
+        gitlab_rails['registry_host'] = "registry.gitlab.decroyere.net"                      
+        gitlab_rails['registry_api_url'] = "https://registry.gitlab.decroyere.net"    
+        gitlab_rails['registry_issuer'] = "gitlab-issuer"
+ 
+        # GitLab SSH
+        gitlab_rails['gitlab_shell_ssh_port'] = 22
+        
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.gitlab.rule=Host(`gitlab.decroyere.net`)
+      - traefik.http.routers.gitlab.entrypoints=websecure
+      - traefik.http.services.gitlab.loadbalancer.server.port=80
+      - traefik.http.routers.gitlab.service=gitlab
+      - traefik.http.routers.gitlab.tls=true"
+      - traefik.http.routers.gitlab.tls.certresolver=letsencrypt
+      - traefik.tcp.routers.gitlab-ssh.rule=HostSNI(`*`)
+      - traefik.tcp.routers.gitlab-ssh.entrypoints=ssh
+      - traefik.tcp.routers.gitlab-ssh.service=gitlab-ssh-svc
+      - traefik.tcp.services.gitlab-ssh-svc.loadbalancer.server.port=22
+ 
+  registry:
+    container_name: gitlab_registry
+    image: registry:2.7
+    restart: unless-stopped
+    networks:
+      - reverse-proxy
+    volumes:
+     - registry_data:/registry
+     - registry_certs:/certs
+    environment:
+      REGISTRY_LOG_LEVEL: debug
+      REGISTRY_STORAGE_FILESYSTEM_ROOTDIRECTORY: /registry
+      REGISTRY_AUTH_TOKEN_REALM: https://gitlab.decroyere.net/jwt/auth
+      REGISTRY_AUTH_TOKEN_SERVICE: container_registry
+      REGISTRY_AUTH_TOKEN_ISSUER: gitlab-issuer
+      REGISTRY_AUTH_TOKEN_ROOTCERTBUNDLE: /certs/gitlab-registry.crt
+      REGISTRY_STORAGE_DELETE_ENABLED: 'true' 
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.registry.rule=Host(`registry.gitlab.decroyere.net`)
+      - traefik.http.routers.registry.entrypoints=websecure
+      - traefik.http.services.registry.loadbalancer.server.port=5000
+      - traefik.http.routers.registry.service=registry
+      - traefik.http.routers.registry.tls=true"
+      - traefik.http.routers.registry.tls.certresolver=letsencrypt
+ 
+  gitlab-postgres:
+    container_name: gitlab_postgres
+    image: postgres:13
+    restart: always
+    networks:
+      - reverse-proxy
+    environment:
+      POSTGRES_PASSWORD: "gitlabpassword"
+      POSTGRES_USER: postgres
+      POSTGRES_DB: gitlab
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+volumes:
+  gitlab_config:
+  gitlab_logs:
+  gitlab_data:
+  registry_data:
+  registry_certs:
+  postgres_data:
