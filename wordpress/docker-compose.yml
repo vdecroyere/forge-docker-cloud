@@ -1,0 +1,42 @@
+version: '3.8'
+
+networks:
+  reverse-proxy:
+    external: true
+services:
+  wordpress:
+    image: wordpress
+    restart: always
+    networks:
+      - reverse-proxy
+    environment:
+      WORDPRESS_DB_HOST: db
+      WORDPRESS_DB_USER: wordpress_user
+      WORDPRESS_DB_PASSWORD: wordpress_pwd
+      WORDPRESS_DB_NAME: wordpress_db
+    volumes:
+      - wordpress:/var/www/html
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.wordpress.rule=Host(`blog.decroyere.net`)
+      - traefik.http.routers.wordpress.entrypoints=websecure
+      - traefik.http.services.wordpress.loadbalancer.server.port=80
+      - traefik.http.routers.wordpress.service=wordpress
+      - traefik.http.routers.wordpress.tls=true
+      - traefik.http.routers.wordpress.tls.certresolver=letsencrypt
+  db:
+    image: mysql:5.7
+    restart: always
+    networks:
+      - reverse-proxy
+    environment:
+      MYSQL_DATABASE: wordpress_db
+      MYSQL_USER: wordpress_user
+      MYSQL_PASSWORD: wordpress_pwd
+      MYSQL_RANDOM_ROOT_PASSWORD: '1'
+    volumes:
+      - db:/var/lib/mysql
+
+volumes:
+  wordpress:
+  db:
