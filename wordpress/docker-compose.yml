@@ -25,7 +25,7 @@ services:
       - traefik.http.routers.wordpress.tls=true
       - traefik.http.routers.wordpress.tls.certresolver=letsencrypt
   db:
-    image: mysql:5.7
+    image: mysql
     restart: always
     networks:
       - reverse-proxy
