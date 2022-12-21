@@ -20,6 +20,7 @@ services:
     labels:
       - traefik.enable=true
       - traefik.http.routers.wordpress.rule=Host(`blog.decroyere.net`)
+      - traefik.http.routers.wordpress.port=8080
       - traefik.http.routers.wordpress.entrypoints=websecure
       - traefik.http.routers.wordpress.service=wordpress
       - traefik.http.routers.wordpress.tls=true
